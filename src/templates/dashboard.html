@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block main %}
+<div class="container mt-4">
+    <h1>Dashboard:</h1>
+    <div id="total_trips_per_year"></div>
+    <div id="percentage_trips_per_status_and_year"></div>
+</div>
+{% endblock main %}
+
+
+{% block scripts %}
+<script type="text/javascript">
+
+    $(document).ready(function () {
+        // Load the Visualization API and the corechart package.
+        google.charts.load('current', {'packages':['corechart', 'bar']});
+
+        // Set a callback to run when the Google Visualization API is loaded.
+        google.charts.setOnLoadCallback(drawChart);
+    });
+    
+
+    // Callback that creates and populates a data table,
+    // instantiates the pie chart, passes in the data and
+    // draws it.
+    function drawChart() {
+        drawChartTotalTripsPerYear();
+        drawChartPercentageTripsPerStatusAndYear();
+    }
+
+    /**
+     * Crea el grafico de Total de viajes por año
+     */
+    function drawChartTotalTripsPerYear() {
+        const chart_id = "total_trips_per_year";
+        const url = "{% url 'celery_results' total_trips_per_year %}";
+        $.ajax(url).done(function (response) {
+            if (response.state == 'FAILURE'){
+                alert(`La tarea fallo, consulte el estado en ${url}`);
+                return;
+            }
+            if (response.state == 'PENDING') {
+                // Volvemos a reintentar si la tarea esta en estado pendiente
+                return drawChartTotalTripsPerYear();
+            }
+            let data = new google.visualization.DataTable();
+            data.addColumn('string', 'Year');
+            data.addColumn('number', 'Total Trips');
+
+            let rows = [];
+            for(const key in response.results) {
+                rows.push([key, response.results[key]]);
+            }
+            data.addRows(rows);
+            
+
+            let options = {
+                title: 'a. ¿Cuántas veces he viajado en el pasado?',
+                hAxis: { title: 'Year' },
+                vAxis: { title: 'Total Trips' }
+            };
+
+            let chart = new google.visualization.ColumnChart(document.getElementById(chart_id));
+            chart.draw(data, options);
+            return;
+        }).fail(function() {
+            alert( "error" );
+        });
+    }
+
+    /**
+     * Crea el grafico de Total de viajes por estado y por año
+     */
+     function drawChartPercentageTripsPerStatusAndYear() {
+        const chart_id = "percentage_trips_per_status_and_year";
+        const url = "{% url 'celery_results' percentage_trips_per_status_and_year %}";
+        $.ajax(url).done(function (response) {
+            if (response.state == 'FAILURE'){
+                alert(`La tarea fallo, consulte el estado en ${url}`);
+                return;
+            }
+            if (response.state == 'PENDING') {
+                // Volvemos a reintentar si la tarea esta en estado pendiente
+                return drawChartPercentageTripsPerStatusAndYear();
+            }
+
+            let status_choices = []
+            for(const key in response.results) {
+                status_choices.push(key)
+            }
+            
+            const row = [];
+
+            for (let i = 0; i < Object.keys(response.results.year).length; i++) {
+                const year = response.results.year[i];
+                const completed = response.results.COMPLETED[i];
+                const canceled = response.results.CANCELED[i];
+                const driverCanceled = response.results.DRIVER_CANCELED[i];
+                const unfulfilled = response.results.UNFULFILLED[i];
+
+                row.push([year, completed, canceled, driverCanceled, unfulfilled]);
+            }
+
+            console.log(status_choices);
+            let data = google.visualization.arrayToDataTable([status_choices].concat(row));
+
+            let options = {
+                title: 'b. ¿Cuántos viajes se completaron o cancelaron?',
+                isStacked: true,
+            };
+
+            let chart = new google.charts.Bar(document.getElementById(chart_id));
+            chart.draw(data, google.charts.Bar.convertOptions(options));
+            return;
+        }).fail(function() {
+            alert( "error" );
+        });
+    }
+  </script>
+{% endblock scripts %}
